@@ -1,0 +1,76 @@
+MODAF FARMS SALES DASHBOARD — DAX MEASURES
+================================================================
+
+-- Calendar table (marked as Date Table in Model view)
+Calendar =
+CALENDAR ( MIN ( sales_fact[Date] ), MAX ( sales_fact[Date] ) )
+
+Calendar[Year] = YEAR ( Calendar[Date] )
+Calendar[MonthName] = FORMAT ( Calendar[Date], "MMM" )
+Calendar[MonthNum] = MONTH ( Calendar[Date] )
+
+-- Core measures
+
+Total Revenue =
+SUM ( sales_fact[Revenue] )
+
+Total Cost =
+SUM ( sales_fact[Cost] )
+
+Total Profit =
+[Total Revenue] - [Total Cost]
+
+Profit Margin % =
+DIVIDE ( [Total Profit], [Total Revenue], 0 )
+
+Order Count =
+DISTINCTCOUNT ( sales_fact[OrderID] )
+
+Avg Order Value =
+DIVIDE ( [Total Revenue], [Order Count], 0 )
+
+-- Time intelligence
+
+Revenue PM =
+CALCULATE ( [Total Revenue], DATEADD ( Calendar[Date], -1, MONTH ) )
+
+Revenue MoM % =
+DIVIDE ( [Total Revenue] - [Revenue PM], [Revenue PM], 0 )
+
+Revenue YTD =
+TOTALYTD ( [Total Revenue], Calendar[Date] )
+
+Revenue Same Period Last Year =
+CALCULATE ( [Total Revenue], SAMEPERIODLASTYEAR ( Calendar[Date] ) )
+
+Revenue YoY % =
+DIVIDE (
+    [Total Revenue] - [Revenue Same Period Last Year],
+    [Revenue Same Period Last Year], 0
+)
+
+-- Category and region breakdowns
+
+Revenue Poultry =
+CALCULATE ( [Total Revenue], dim_products[Category] = "Poultry" )
+
+Revenue Livestock =
+CALCULATE ( [Total Revenue], dim_products[Category] = "Livestock" )
+
+Top Region by Revenue =
+CALCULATE (
+    SELECTEDVALUE ( sales_fact[Region] ),
+    TOPN ( 1, VALUES ( sales_fact[Region] ), [Total Revenue], DESC )
+)
+
+Region Rank =
+RANKX ( ALL ( sales_fact[Region] ), [Total Revenue], , DESC )
+
+-- Flags used for conditional formatting on the KPI cards
+
+Margin Flag =
+IF ( [Profit Margin %] < 0.25, "Low", IF ( [Profit Margin %] < 0.32, "Watch", "Healthy" ) )
+
+Revenue vs Target =
+VAR Target = 22000000
+RETURN DIVIDE ( [Total Revenue], Target, 0 )

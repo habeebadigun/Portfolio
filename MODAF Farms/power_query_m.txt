@@ -1,0 +1,64 @@
+MODAF FARMS SALES DASHBOARD — POWER QUERY (M) CLEANING STEPS
+================================================================
+Applied to sales_fact.csv on load into Power BI.
+
+let
+    Source = Csv.Document(File.Contents("sales_fact.csv"),
+        [Delimiter=",", Columns=13, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+
+    // 1. Set correct data types on load
+    ChangedType = Table.TransformColumnTypes(PromotedHeaders, {
+        {"OrderID", Int64.Type}, {"Date", type date}, {"Product", type text},
+        {"Category", type text}, {"Region", type text}, {"Channel", type text},
+        {"Quantity", Int64.Type}, {"UnitPrice", type number}, {"UnitCost", type number},
+        {"Revenue", type number}, {"Cost", type number}, {"Profit", type number},
+        {"MarginPct", type number}
+    }),
+
+    // 2. Remove any rows with a null OrderID or non-positive Quantity
+    //    (guards against blank export rows and cancelled-order artifacts)
+    FilteredRows = Table.SelectRows(ChangedType, each
+        [OrderID] <> null and [Quantity] > 0),
+
+    // 3. Trim and standardize text fields (source exports had trailing
+    //    spaces on Region from a copy-paste in the original workbook)
+    TrimmedText = Table.TransformColumns(FilteredRows, {
+        {"Region", Text.Trim, type text},
+        {"Channel", Text.Trim, type text},
+        {"Product", Text.Trim, type text}
+    }),
+
+    // 4. Standardize "Ibadan Metro" vs "Ibadan" naming inconsistency
+    //    found in early exports (Sept–Oct 2025 batch)
+    FixedRegionNames = Table.ReplaceValue(TrimmedText,
+        "Ibadan", "Ibadan Metro", Replacer.ReplaceText, {"Region"}),
+
+    // 5. Recompute Profit and MarginPct in-query so the model never
+    //    trusts a stale calculated column from the source file
+    AddedProfit = Table.AddColumn(FixedRegionNames, "Profit_Recalc",
+        each [Revenue] - [Cost], type number),
+    AddedMargin = Table.AddColumn(AddedProfit, "MarginPct_Recalc",
+        each if [Revenue] = 0 then 0 else Number.Round(([Revenue]-[Cost])/[Revenue]*100, 1),
+        type number),
+
+    // 6. Drop the original (source-calculated) columns, keep the
+    //    recalculated ones, rename back to clean names
+    RemovedOld = Table.RemoveColumns(AddedMargin, {"Profit", "MarginPct"}),
+    RenamedFinal = Table.RenameColumns(RemovedOld, {
+        {"Profit_Recalc", "Profit"}, {"MarginPct_Recalc", "MarginPct"}
+    }),
+
+    // 7. Add a Year-Month key for time intelligence and sorting
+    AddedYearMonth = Table.AddColumn(RenamedFinal, "YearMonth",
+        each Date.ToText([Date], "yyyy-MM"), type text)
+in
+    AddedYearMonth
+
+NOTES
+-----
+- A separate query loads dim_products.csv and is joined to sales_fact
+  on Product (many-to-one) to support category-level slicing without
+  repeating Category text on every fact row.
+- A Calendar dimension table (DAX, see dax_measures.txt) is marked as
+  the official Date table for time intelligence functions.

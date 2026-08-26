@@ -1,0 +1,9 @@
+Product,Category,BasePrice
+Broiler Chicken,Poultry,3200
+Layer Eggs (Crate),Poultry,2800
+Turkey,Poultry,4500
+Goat Meat (kg),Livestock,3800
+"Cattle (Live, per head)",Livestock,280000
+"Ram (Live, per head)",Livestock,95000
+Feed - Broiler Starter (bag),Feed,15500
+Feed - Layer Mash (bag),Feed,13200
