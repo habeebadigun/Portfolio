@@ -1,0 +1,30 @@
+REGIONAL SALES TERRITORY HEATMAP — POWER QUERY (M) CLEANING STEPS
+================================================================
+
+let
+    Source = Csv.Document(File.Contents("territory_visits.csv"),
+        [Delimiter=",", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    PromotedHeaders = Table.PromoteHeaders(Source, [PromoteAllScalars=true]),
+
+    ChangedType = Table.TransformColumnTypes(PromotedHeaders, {
+        {"VisitID", Int64.Type}, {"Date", type date}, {"Territory", type text},
+        {"Region", type text}, {"Rep", type text}, {"DealSize", type number},
+        {"Converted", Int64.Type}
+    }),
+
+    // Remove test/blank rows exported from the CRM with no rep assigned
+    RemovedBlankReps = Table.SelectRows(ChangedType, each [Rep] <> null and [Rep] <> ""),
+
+    // A DealSize of 0 on a converted row is a data entry error from the
+    // CRM (deal marked won but amount not filled in) — exclude those
+    // rows from revenue-based measures rather than let them drag down
+    // Revenue per Visit
+    FlaggedBadRows = Table.AddColumn(RemovedBlankReps, "ValidForRevenue",
+        each not ([Converted] = 1 and [DealSize] = 0), type logical),
+
+    // Standardize territory name spacing/casing (CRM export had both
+    // "Lekki-Ajah" and "Lekki Ajah" for the same territory)
+    FixedNames = Table.ReplaceValue(FlaggedBadRows,
+        "Lekki Ajah", "Lekki-Ajah", Replacer.ReplaceText, {"Territory"})
+in
+    FixedNames

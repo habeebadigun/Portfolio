@@ -1,0 +1,42 @@
+REGIONAL SALES TERRITORY HEATMAP — DAX MEASURES
+================================================================
+
+Total Revenue =
+SUM ( territory_visits[DealSize] )
+
+Total Visits =
+DISTINCTCOUNT ( territory_visits[VisitID] )
+
+Converted Visits =
+CALCULATE ( [Total Visits], territory_visits[Converted] = 1 )
+
+Conversion Rate =
+DIVIDE ( [Converted Visits], [Total Visits], 0 )
+
+Revenue per Visit =
+DIVIDE ( [Total Revenue], [Total Visits], 0 )
+
+Reps Active in Territory =
+DISTINCTCOUNT ( territory_visits[Rep] )
+
+-- Density score used to color the heatmap matrix.
+-- Blends conversion rate and revenue per visit so a territory with
+-- few but high-value deals doesn't rank the same as one with many
+-- low-value ones.
+Territory Density Score =
+VAR ConvNorm = DIVIDE ( [Conversion Rate], 0.40 )   -- 0.40 = best observed rate
+VAR RevNorm = DIVIDE ( [Revenue per Visit], 25000 ) -- 25000 = best observed avg
+RETURN ( ConvNorm * 0.5 ) + ( RevNorm * 0.5 )
+
+-- Flags a territory as underserved: below 60% of the average
+-- rep coverage seen across all territories
+Territory Rep Coverage vs Avg =
+VAR AvgReps =
+    AVERAGEX ( ALL ( territory_visits[Territory] ), [Reps Active in Territory] )
+RETURN DIVIDE ( [Reps Active in Territory], AvgReps, 0 )
+
+Is Underserved Zone =
+IF ( [Territory Rep Coverage vs Avg] < 0.6, "Underserved", "Covered" )
+
+Rank by Revenue =
+RANKX ( ALL ( territory_visits[Territory] ), [Total Revenue], , DESC )
